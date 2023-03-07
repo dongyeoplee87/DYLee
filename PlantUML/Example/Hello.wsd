@@ -1,0 +1,5 @@
+@startuml
+
+hi --> hello : hihi
+
+@enduml

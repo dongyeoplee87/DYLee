@@ -1,0 +1,32 @@
+@startuml
+title define DLT_NETWORK_TRACE_ENABLE
+
+actor Application as app
+participant dlt_user.c as user
+participant dlt_user_macros.h as macro
+queue queue as queue
+
+user -> dlt_thread : dlt_start_threads()
+dlt_thread -> housekeeper_thread : pthread_create(dlt_user_housekeeperthread_function)
+dlt_thread -> seg_thread : pthread_create(dlt_user_trace_network_segmented_thread)
+seg_thread -> seg_thread : Wait setting :\n dlt_user.dlt_segmented_queue_read_handle
+app -> macro : DLT_TRACE_NETWORK(...)
+macro -> user : dlt_user_trace_network_segmented(...)
+user -> user : Check size is bigger than dlt_user.log_buf_len
+alt small_size or truncate_allowed
+user -> user : dlt_user_trace_network(...)
+user -> macro : return
+else
+user -> seg_thread : dlt_user_trace_network_segmented_start(...)
+seg_thread -> seg_thread : Wakeup
+user -> queue : dlt_init_message_queue()
+user -> queue : mq_send(dlt_segmented_queue_write_handle, payload)
+seg_thread -> queue : mq_receive(dlt_segmented_queue_read_handle)
+alt while(payload_empty)
+seg_thread -> seg_thread : dlt_user_trace_network_segmented_segment(...)
+seg_thread -> daemon : Write data
+end
+end
+
+' TODO : truncate와 segmented의 차이!!
+' app -> macro : DLT_TRACE_NETWORK_TRUNCATED(...)

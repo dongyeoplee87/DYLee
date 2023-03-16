@@ -1,0 +1,68 @@
+@startuml
+title DLT_REGISTER_CONTEXT(CONTEXT, CONTEXTID, DESCRIPTION)
+' example : DLT_REGISTER_CONTEXT(con_exa1, "CON", "First context");
+' Register context without LogLevel & TraceStatus & Callback
+
+actor APP as app
+participant dlt_user_macros.h as macro #Cyan
+participant dlt_user.c as user #Cyan
+participant SysEnv as env
+queue DLT_DAEMON_FIFO as fifo #Orange
+participant dlt_daemon.c as daemon #Gold
+
+
+app -> macro : DLT_REGISTER_CONTEXT(CONTEXT, CONTEXTID, DESCRIPTION)
+
+macro -> user : DltReturnValue **dlt_register_context(...)**
+alt DLT_NO_INIT
+user -> user : <color:blue>see **[SEQ][dlt_user]dlt_init.wsd**
+end
+
+user -> user : **dlt_register_context_ll_ts_llccb(...)**\n LogLv:DLT_USER_LOG_LEVEL_NOT_SET,\n TraceStatus:DLT_USER_TRACE_STATUS_NOT_SET
+    user -> user : Check parameter & data
+    user -> env : **dlt_env_adjust_ll_from_env(...)**
+    alt CONFIG_ENV_LOG_LEVEL
+    env -> user : Return ENV log level
+    user -> user : Set ENV Log level
+    else
+    user -> user : Set log level to DLT_USER_LOG_LEVEL_NOT_SET
+    end
+    user -> user : Update log level using env/parameter
+    user -> user : Update trace status using parameter
+    user -> user : **dlt_user_log_send_register_context(...)**
+        user -> fifo : <color:blue>see **[SEQ][dlt_common]dlt_user_log_out3.wsd** \
+        \n Header : DLT_USER_MESSAGE_REGISTER_CONTEXT\n LogLv : DLT_USER_LOG_LEVEL_NOT_SET or ENV
+
+        fifo -> daemon : **dlt_daemon_process_user_messages(...)**
+            daemon -> daemon : **dlt_daemon_process_user_message_register_context(...)**
+                daemon -> daemon : **dlt_daemon_application_find(...)**
+                ' end of dlt_daemon_application_find
+                daemon -> daemon : **dlt_daemon_context_add(...)**
+                ' end of dlt_daemon_context_add
+                ' TODO
+                alt LogLv is DEFAULT
+                daemon -> daemon : **dlt_daemon_user_send_log_level(...)**
+                    ' TODO
+                    daemon -> fifo : <color:blue>see **[SEQ][dlt_common]dlt_user_log_out2.wsd** \
+                    \n Header:DLT_USER_MESSAGE_LOG_LEVEL\nL ogLv:deamon->default_log_level \
+                    \n <color:blue>see **[STAT][DltDaemonLocal]default_log_level.wsd**
+                    ' default_log_level <-- dlt_daemon_init_runtime_configuration(...) or dlt_daemon_configuration_load(...)
+                    ' set header DLT_USER_MESSAGE_LOG_LEVEL
+                ' end of dlt_daemon_user_send_log_level
+                end
+            ' end of dlt_daemon_process_user_message_register_context
+        ' end of dlt_daemon_process_user_messages
+        alt FIFO_ERROR
+        user -> user : dlt_user_log_out_error_handling
+            user -> user : **dlt_buffer_check_size**
+            ' end of dlt_buffer_check_size
+            user -> user : <color:blue>see **[SEQ][dlt_common]dlt_buffer_push3.wsd**
+            ' end of dlt_buffer_push3
+        ' end of dlt_user_log_out_error_handling
+        end
+    ' end of dlt_user_log_send_register_context
+' end of dlt_register_context_ll_ts_llccb
+
+
+
+@enduml
